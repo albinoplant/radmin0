@@ -8,13 +8,106 @@ import {
   UPDATE_MANY,
   DELETE,
   DELETE_MANY,
+  DataProvider,
+  CreateParams,
+  CreateResult,
+  DeleteManyParams,
+  DeleteManyResult,
+  DeleteParams,
+  DeleteResult,
+  GetListParams,
+  GetListResult,
+  GetManyParams,
+  GetManyReferenceParams,
+  GetManyReferenceResult,
+  GetManyResult,
+  GetOneParams,
+  GetOneResult,
+  Record,
+  UpdateManyParams,
+  UpdateManyResult,
+  UpdateParams,
+  UpdateResult,
 } from "react-admin";
-import Parse from "parse";
+import Parse, { Attributes } from "parse";
 
 interface ParseClientConfig {
   URL: string;
   APP_ID: string;
   JAVASCRIPT_KEY: string | undefined;
+}
+
+class ParseClient implements DataProvider {
+  public async getList<RecordType extends Record = Record>(
+    resource: string,
+    params: GetListParams
+  ): Promise<GetListResult<RecordType>> {
+    const { page, perPage } = params.pagination;
+    const { field, order } = params.sort;
+    const { filter } = params;
+
+    const resourceObj = Parse.Object.extend(resource);
+    const query = new Parse.Query(resourceObj);
+
+    const count = await query.count();
+    query.limit(perPage);
+    query.skip((page - 1) * perPage);
+
+    if (order === "DESC") query.descending(field);
+    else if (order === "ASEC") query.ascending(field);
+    Object.keys(filter).map((f) => query.matches(f, filter[f], "i"));
+    const results = await query.find();
+
+    return {
+      total: count,
+      data: this.transformResults(results),
+    };
+  }
+  declare getOne: <RecordType extends Record = Record>(
+    resource: string,
+    params: GetOneParams
+  ) => Promise<GetOneResult<RecordType>>;
+  declare getMany: <RecordType extends Record = Record>(
+    resource: string,
+    params: GetManyParams
+  ) => Promise<GetManyResult<RecordType>>;
+  declare getManyReference: <RecordType extends Record = Record>(
+    resource: string,
+    params: GetManyReferenceParams
+  ) => Promise<GetManyReferenceResult<RecordType>>;
+  declare update: <RecordType extends Record = Record>(
+    resource: string,
+    params: UpdateParams<any>
+  ) => Promise<UpdateResult<RecordType>>;
+  declare updateMany: (
+    resource: string,
+    params: UpdateManyParams<any>
+  ) => Promise<UpdateManyResult>;
+  declare create: <RecordType extends Record = Record>(
+    resource: string,
+    params: CreateParams<any>
+  ) => Promise<CreateResult<RecordType>>;
+  declare delete: <RecordType extends Record = Record>(
+    resource: string,
+    params: DeleteParams
+  ) => Promise<DeleteResult<RecordType>>;
+  declare deleteMany: (
+    resource: string,
+    params: DeleteManyParams
+  ) => Promise<DeleteManyResult>;
+
+  private transformResults<
+    ResultsType extends Parse.Object<Attributes> = Parse.Object<Attributes>,
+    RecordType extends Record = Record
+  >(results: ResultsType[]): RecordType[] {
+    return results.map(
+      (o) =>
+        ({
+          id: o.id,
+          ...o.attributes,
+        } as RecordType)
+    );
+  }
 }
 
 const ParseClientService = ({
